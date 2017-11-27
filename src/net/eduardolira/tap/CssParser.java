@@ -3,38 +3,9 @@ package net.eduardolira.tap;
 import java.io.*;
 import java.util.HashMap;
 import java.util.function.Consumer;
+import static net.eduardolira.tap.CodePoint.*;
 
 public class CssParser {
-    private static final char CARRIAGE_RETURN = 0x000D;
-    private static final char FORM_FEED = 0x000C;
-    private static final char LINE_FEED = 0x000A;
-    private static final char CHARACTER_TABULATION = 0x0009;
-    private static final char SPACE = 0x0020;
-    private static final char NULL = 0x0000;
-    private static final char REPLACEMENT_CHARACTER = 0xFFFD;
-    private static final char QUOTATION_MARK = 0x0022;
-    private static final char APOSTROPHE = 0x0027;
-    private static final char REVERSE_SOLIDUS = 0x005C;
-    private static final char NUMBER_SIGN = 0x0023;
-    private static final char DOLLAR_SIGN = 0x0024;
-    public static final char LEFT_PARENTHESIS = 0x0028;
-    public static final char RIGHT_PARENTHESIS = 0x0029;
-    public static final char COMMA = 0x002C;
-    public static final char COLON = 0x003A;
-    public static final char SEMICOLON = 0x003B;
-    public static final char LEFT_SQUARE_BRACKET = 0x005B;
-    public static final char RIGHT_SQUARE_BRACKET = 0x005D;
-    public static final char LEFT_CURLY_BRACKET = 0x007B;
-    public static final char RIGHT_CURLY_BRACKET = 0x007D;
-    public static final char LOW_LINE = 0x005F;
-    public static final char LATIN_CAPITAL_LETTER_A = 0x0041;
-    public static final char LATIN_CAPITAL_LETTER_Z = 0x005A;
-    public static final char LATIN_SMALL_LETTER_A = 0x0061;
-    public static final char LATIN_SMALL_LETTER_Z = 0x007A;
-    public static final char HYPHEN_MINUS = 0x002D;
-    private static final char DIGIT_ZERO = 0x0030;
-    private static final char DIGIT_NINE = 0x0039;
-
     private BufferedReader rd;
     private static final HashMap<Character, Integer> charToSimpleTokenType = new HashMap<>();
     static {
@@ -48,6 +19,7 @@ public class CssParser {
         charToSimpleTokenType.put(LEFT_CURLY_BRACKET, Token.LEFT_CURLY_BRACKET);
         charToSimpleTokenType.put(RIGHT_CURLY_BRACKET, Token.RIGHT_CURLY_BRACKET);
     }
+
     public void setInputStream(InputStream inputStream) {
         this.rd = new BufferedReader(new InputStreamReader(inputStream));
     }
@@ -56,13 +28,13 @@ public class CssParser {
         int in = -1;
         StringBuilder token = new StringBuilder();
         while((in = rd.read()) != -1) {
-            char codepoint = preprocess((char) in);
-            if(isWhiteSpace(codepoint)) tokenConsumer.accept(handleWhitespace(token));
-            else if(codepoint == QUOTATION_MARK) tokenConsumer.accept(handleString(token, QUOTATION_MARK));
-            //else if(codepoint == NUMBER_SIGN) tokenConsumer.accept(handleNumSign(token));
-            else if(codepoint == APOSTROPHE) tokenConsumer.accept(handleString(token, APOSTROPHE));
-            else if(charToSimpleTokenType.containsKey(codepoint)){
-                tokenConsumer.accept(new Token(charToSimpleTokenType.get(codepoint),Character.toString(codepoint)));
+            char codePoint = preprocess((char) in);
+            if(isWhiteSpace(codePoint)) tokenConsumer.accept(handleWhitespace(token));
+            else if(codePoint == QUOTATION_MARK) tokenConsumer.accept(handleString(token, QUOTATION_MARK));
+            //else if(codePoint == NUMBER_SIGN) tokenConsumer.accept(handleNumSign(token));
+            else if(codePoint == APOSTROPHE) tokenConsumer.accept(handleString(token, APOSTROPHE));
+            else if(charToSimpleTokenType.containsKey(codePoint)){
+                tokenConsumer.accept(new Token(charToSimpleTokenType.get(codePoint),Character.toString(codePoint)));
             }
         }
     }
@@ -72,13 +44,13 @@ public class CssParser {
     }
 
 
-    private char preprocess(char codepoint) throws IOException {
+    private char preprocess(char codePoint) throws IOException {
         //Replace pairs of U+000D CARRIAGE RETURN (CR) followed by U+000A LINE FEED (LF) with a single U+000A LINE FEED (LF) code point.
         //Replace of U+000D CARRIAGE RETURN (not followed by U+000A LINE FEED (LF)) with U+000A LINE FEED (LF) code
-        if(codepoint == CARRIAGE_RETURN) {
+        if(codePoint == CARRIAGE_RETURN) {
             rd.mark(1);
-            char nextCodepoint = (char) rd.read(); //todo what if end of stream
-            if (nextCodepoint == LINE_FEED){
+            char nextCodePoint = (char) rd.read(); //todo what if end of stream
+            if (nextCodePoint == LINE_FEED){
                 return LINE_FEED;
             }else{
                 rd.reset();
@@ -86,10 +58,10 @@ public class CssParser {
             }
         }
         //Replace U+000C FORM FEED with U+000A LINE FEED
-        if(codepoint == FORM_FEED) return LINE_FEED;
+        if(codePoint == FORM_FEED) return LINE_FEED;
         //Replace any U+0000 NULL code point with U+FFFD REPLACEMENT CHARACTER
-        if(codepoint == NULL) return REPLACEMENT_CHARACTER;
-        return codepoint;
+        if(codePoint == NULL) return REPLACEMENT_CHARACTER;
+        return codePoint;
     }
 
     private Token handleWhitespace(StringBuilder stringBuilder) throws IOException {
@@ -129,48 +101,48 @@ public class CssParser {
         return new Token(Token.STRING, stringBuilder.toString());
     }
 
-    private static boolean isNewLine(char codepoint){
-        return codepoint == LINE_FEED;
+    private static boolean isNewLine(char codePoint){
+        return codePoint == LINE_FEED;
     }
 
-    private static boolean isWhiteSpace(char codepoint){
-        if(isNewLine(codepoint)) return true;
-        if(codepoint == CHARACTER_TABULATION) return true;
-        if(codepoint == SPACE) return true;
+    private static boolean isWhiteSpace(char codePoint){
+        if(isNewLine(codePoint)) return true;
+        if(codePoint == CHARACTER_TABULATION) return true;
+        if(codePoint == SPACE) return true;
         return false;
     }
 
-    private static boolean isNonAsciiCodepoint(char codepoint){
-        return codepoint >= 0x080;
+    private static boolean isNonAsciiCodePoint(char codePoint){
+        return codePoint >= 0x080;
     }
 
-    private static boolean isNameStartCodepoint(char codepoint){
-        if(isLetter(codepoint)) return true;
-        if(isNonAsciiCodepoint(codepoint)) return true;
-        if(codepoint==LOW_LINE) return true;
+    private static boolean isNameStartCodePoint(char codePoint){
+        if(isLetter(codePoint)) return true;
+        if(isNonAsciiCodePoint(codePoint)) return true;
+        if(codePoint==LOW_LINE) return true;
         return false;
     }
 
-    private static boolean isNameCodepoint(char codepoint){
-        if(isNameStartCodepoint(codepoint)) return true;
-        if(isDigit(codepoint)) return true;
-        if(codepoint == HYPHEN_MINUS) return true;
+    private static boolean isNameCodePoint(char codePoint){
+        if(isNameStartCodePoint(codePoint)) return true;
+        if(isDigit(codePoint)) return true;
+        if(codePoint == HYPHEN_MINUS) return true;
         return false;
     }
 
-    private static boolean isDigit(char codepoint){
-        return codepoint>=DIGIT_ZERO&&codepoint<=DIGIT_NINE;
+    private static boolean isDigit(char codePoint){
+        return codePoint>=DIGIT_ZERO&&codePoint<=DIGIT_NINE;
     }
-    private static boolean isLetter(char codepoint){
-        return isUpperCaseLetter(codepoint) || isLowerCaseLetter(codepoint);
-    }
-
-    private static boolean isLowerCaseLetter(char codepoint){
-        return (codepoint>=LATIN_SMALL_LETTER_A && codepoint<=LATIN_SMALL_LETTER_Z);
+    private static boolean isLetter(char codePoint){
+        return isUpperCaseLetter(codePoint) || isLowerCaseLetter(codePoint);
     }
 
-    private static boolean isUpperCaseLetter(char codepoint){
-        return (codepoint>=LATIN_CAPITAL_LETTER_A && codepoint<=LATIN_CAPITAL_LETTER_Z);
+    private static boolean isLowerCaseLetter(char codePoint){
+        return (codePoint>=LATIN_SMALL_LETTER_A && codePoint<=LATIN_SMALL_LETTER_Z);
+    }
+
+    private static boolean isUpperCaseLetter(char codePoint){
+        return (codePoint>=LATIN_CAPITAL_LETTER_A && codePoint<=LATIN_CAPITAL_LETTER_Z);
     }
 
 }
