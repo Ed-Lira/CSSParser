@@ -10,6 +10,7 @@ public class CodePoint {
     public static final char REPLACEMENT_CHARACTER = 0xFFFD;
     public static final char QUOTATION_MARK = 0x0022;
     public static final char APOSTROPHE = 0x0027;
+    public static final char SOLIDUS = 0x002F;
     public static final char REVERSE_SOLIDUS = 0x005C;
     public static final char NUMBER_SIGN = 0x0023;
     public static final char DOLLAR_SIGN = 0x0024;
@@ -28,6 +29,13 @@ public class CodePoint {
     public static final char LATIN_SMALL_LETTER_A = 0x0061;
     public static final char LATIN_SMALL_LETTER_Z = 0x007A;
     public static final char HYPHEN_MINUS = 0x002D;
+    public static final char PLUS_SIGN = 0x002B;
     public static final char DIGIT_ZERO = 0x0030;
     public static final char DIGIT_NINE = 0x0039;
+    public static final char FULL_STOP = 0x002E;
+    public static final char LESS_THAN_SIGN = 0x003C;
+    public static final char COMMERCIAL_AT = 0x0040;
+    public static final char CIRCUMFLEX_ACCENT = 0x005E;
+    public static final char LATIN_CAPITAL_LETTER_E = 0x0045;
+    public static final char LATIN_SMALL_LETTER_E = 0x0065;
 }

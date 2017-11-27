@@ -27,22 +27,145 @@ public class CssParser {
     public void streamTokens(Consumer<Token> tokenConsumer) throws IOException {
         int in = -1;
         StringBuilder token = new StringBuilder();
+
         while((in = rd.read()) != -1) {
             char codePoint = preprocess((char) in);
             if(isWhiteSpace(codePoint)) tokenConsumer.accept(handleWhitespace(token));
             else if(codePoint == QUOTATION_MARK) tokenConsumer.accept(handleString(token, QUOTATION_MARK));
-            //else if(codePoint == NUMBER_SIGN) tokenConsumer.accept(handleNumSign(token));
+            else if(codePoint == NUMBER_SIGN) tokenConsumer.accept(handleNumSign(token));
+            //todo else if(codePoint == DOLLAR_SIGN) tokenConsumer.accept(handleDollarSign(token));
             else if(codePoint == APOSTROPHE) tokenConsumer.accept(handleString(token, APOSTROPHE));
+            //else if(codePoint == HYPHEN_MINUS) tokenConsumer.accept(handleHyphenMinus(token));
+
+                //else if(codePoint == FULL_STOP) tokenConsumer.accept(handleFullStop(token));
+            //else if(codePoint == SOLIDUS) tokenConsumer.accept(handleSolidus(token));
+            //else if(codePoint == LESS_THAN_SIGN) tokenConsumer.accept(handleLessThanSign(token));
+            else if(isDigit(codePoint)) tokenConsumer.accept(consumeNumericToken(codePoint, token));
             else if(charToSimpleTokenType.containsKey(codePoint)){
                 tokenConsumer.accept(new Token(charToSimpleTokenType.get(codePoint),Character.toString(codePoint)));
             }
         }
     }
 
-    private Token handleNumSign(StringBuilder token) {
+    private Token handleHyphenMinus(StringBuilder token) {
         return null;
     }
 
+    private Token consumeNumericToken(char codePoint, StringBuilder token) throws IOException {
+        token.setLength(0);
+        token.append(codePoint);
+        CSSNumber cssnum = consumeNumber(token);
+        return new Token(Token.NUMBER, cssnum.repr);
+    }
+
+    private CSSNumber consumeNumber(StringBuilder token) throws IOException {
+        CSSNumber number = new CSSNumber();
+        number.type = CSSNumber.TYPE_INTEGER;
+        rd.mark(1);
+        char n0 = (char) rd.read();
+        if(n0==HYPHEN_MINUS || n0==PLUS_SIGN){
+            token.append(n0);
+        }else{
+            rd.reset();
+        }
+        while (true){
+            rd.mark(1);
+            char np = (char) rd.read();
+            if(!isDigit(np)){
+                rd.reset();
+                break;
+            }
+            token.append(np);
+        }
+        rd.mark(2);
+        char n2 = (char) rd.read();
+        char n3 = (char) rd.read();
+        if(n2==FULL_STOP && isDigit(n3)){
+            token.append(n2);
+            token.append(n3);
+            number.type = CSSNumber.TYPE_NUMBER;
+            while (true){
+                rd.mark(1);
+                char np = (char) rd.read();
+                if(!isDigit(np)){
+                    rd.reset();
+                    break;
+                }
+                token.append(np);
+            }
+        }
+        if(n2==LATIN_CAPITAL_LETTER_E || n2==LATIN_SMALL_LETTER_E){
+            if(n3==HYPHEN_MINUS || n3==PLUS_SIGN){
+                char n4 = (char) rd.read();
+                if(isDigit(n4)){
+                    token.append(n2);
+                    token.append(n3);
+                    token.append(n4);
+                    while (true){
+                        rd.mark(1);
+                        char np = (char) rd.read();
+                        if(!isDigit(np)){
+                            rd.reset();
+                            break;
+                        }
+                        token.append(np);
+                    }
+                }
+            }else if(isDigit(n3)){
+                token.append(n2);
+                token.append(n3);
+                while (true){
+                    rd.mark(1);
+                    char np = (char) rd.read();
+                    if(!isDigit(np)){
+                        rd.reset();
+                        break;
+                    }
+                    token.append(np);
+                }
+            }
+        }
+        //Convert repr to a number, and set the value to the returned value.
+        number.repr = token.toString();
+        return number;
+    }
+
+    private Token handleNumSign(StringBuilder token) throws IOException {
+        rd.mark(3);
+        char n1 = (char) rd.read();
+        char n2 = (char) rd.read();
+        char n3 = (char) rd.read();
+        if(isNameCodePoint(n1)||isValidEscape(n1,n2)){
+            rd.reset();
+            boolean wouldStartValidId = wouldStartValidIdentifier(n1, n2, n3);
+            consumeAName(token);
+            Token hashToken = new Token(Token.HASH,token.toString());
+            if(wouldStartValidId) hashToken.setFlag(Token.FLAG_ID);
+            return hashToken;
+        }else{
+            //Otherwise, return a <delim-token> with its value set to the current input code point.
+            rd.reset();
+            return new Token(Token.DELIM, Character.toString(n1));
+        }
+    }
+
+    private boolean wouldStartValidIdentifier(char n0, char n1, char n2){
+        if(n0==HYPHEN_MINUS){
+            if(isNameStartCodePoint(n1)) return true;
+            return isValidEscape(n1,n2);
+        }else if(isNameStartCodePoint(n0)){
+            return true;
+        }else if(n0==REVERSE_SOLIDUS){
+            return isValidEscape(n0,n1);
+        }
+        return false;
+    }
+
+    private boolean isValidEscape(char n0, char n1){
+        if(n0!=REVERSE_SOLIDUS) return false;
+        if(isNewLine(n1)) return false;
+        return true;
+    }
 
     private char preprocess(char codePoint) throws IOException {
         //Replace pairs of U+000D CARRIAGE RETURN (CR) followed by U+000A LINE FEED (LF) with a single U+000A LINE FEED (LF) code point.
@@ -121,6 +244,32 @@ public class CssParser {
         if(isNonAsciiCodePoint(codePoint)) return true;
         if(codePoint==LOW_LINE) return true;
         return false;
+    }
+
+    private String consumeAName(StringBuilder stringBuilder) throws IOException {
+        stringBuilder.setLength(0);
+        int in;
+        boolean procede = true;
+        while(procede) {
+            procede = (in = rd.read()) != -1;
+            rd.mark(1);
+            char n0 = (char) in; //todo still preprocess
+            if(isNameCodePoint(n0)){
+                stringBuilder.append(n0);
+                continue;
+            }
+            rd.reset();
+            rd.mark(2);
+            rd.skip(1);
+            char n1 = (char) rd.read(); //todo still preprocess
+            if(isValidEscape(n0,n1)){
+                stringBuilder.append(n1);
+            }else{
+                rd.reset();
+                return stringBuilder.toString();
+            }
+        }
+        return stringBuilder.toString();
     }
 
     private static boolean isNameCodePoint(char codePoint){
