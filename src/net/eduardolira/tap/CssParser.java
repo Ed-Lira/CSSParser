@@ -1,13 +1,17 @@
 package net.eduardolira.tap;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.URL;
 import java.util.HashMap;
 import java.util.function.Consumer;
+
 import static net.eduardolira.tap.CodePoint.*;
 
 public class CssParser {
-    private BufferedReader rd;
     private static final HashMap<Character, Integer> charToSimpleTokenType = new HashMap<>();
+
     static {
         charToSimpleTokenType.put(COMMA, Token.COMMA);
         charToSimpleTokenType.put(COLON, Token.COLON);
@@ -20,29 +24,75 @@ public class CssParser {
         charToSimpleTokenType.put(RIGHT_CURLY_BRACKET, Token.RIGHT_CURLY_BRACKET);
     }
 
+    private CSSReader rd;
+
+    private static boolean isNewLine(char codePoint) {
+        return codePoint == LINE_FEED;
+    }
+
+    private static boolean isWhiteSpace(char codePoint) {
+        if (isNewLine(codePoint)) return true;
+        if (codePoint == CHARACTER_TABULATION) return true;
+        return codePoint == SPACE;
+    }
+
+    private static boolean isNonAsciiCodePoint(char codePoint) {
+        return codePoint >= 0x080;
+    }
+
+    private static boolean isNameStartCodePoint(char codePoint) {
+        if (isLetter(codePoint)) return true;
+        if (isNonAsciiCodePoint(codePoint)) return true;
+        return codePoint == LOW_LINE;
+    }
+
+    private static boolean isNameCodePoint(char codePoint) {
+        if (isNameStartCodePoint(codePoint)) return true;
+        if (isDigit(codePoint)) return true;
+        return codePoint == HYPHEN_MINUS;
+    }
+
+    private static boolean isDigit(char codePoint) {
+        return codePoint >= DIGIT_ZERO && codePoint <= DIGIT_NINE;
+    }
+
+    private static boolean isLetter(char codePoint) {
+        return isUpperCaseLetter(codePoint) || isLowerCaseLetter(codePoint);
+    }
+
+    private static boolean isLowerCaseLetter(char codePoint) {
+        return (codePoint >= LATIN_SMALL_LETTER_A && codePoint <= LATIN_SMALL_LETTER_Z);
+    }
+
+    private static boolean isUpperCaseLetter(char codePoint) {
+        return (codePoint >= LATIN_CAPITAL_LETTER_A && codePoint <= LATIN_CAPITAL_LETTER_Z);
+    }
+
     public void setInputStream(InputStream inputStream) {
-        this.rd = new BufferedReader(new InputStreamReader(inputStream));
+        this.rd = new CSSReader(new InputStreamReader(inputStream));
     }
 
     public void streamTokens(Consumer<Token> tokenConsumer) throws IOException {
-        int in = -1;
+        char codePoint;
         StringBuilder token = new StringBuilder();
-
-        while((in = rd.read()) != -1) {
-            char codePoint = preprocess((char) in);
-            if(isWhiteSpace(codePoint)) tokenConsumer.accept(handleWhitespace(token));
-            else if(codePoint == QUOTATION_MARK) tokenConsumer.accept(handleString(token, QUOTATION_MARK));
-            else if(codePoint == NUMBER_SIGN) tokenConsumer.accept(handleNumSign(token));
-            //todo else if(codePoint == DOLLAR_SIGN) tokenConsumer.accept(handleDollarSign(token));
-            else if(codePoint == APOSTROPHE) tokenConsumer.accept(handleString(token, APOSTROPHE));
-            //else if(codePoint == HYPHEN_MINUS) tokenConsumer.accept(handleHyphenMinus(token));
+        int temp;
+        while ((temp = rd.readCodePoint())!=-1) {
+            codePoint = (char) temp;
+            System.out.println(temp);
+            if (isWhiteSpace(codePoint)) tokenConsumer.accept(handleWhitespace(token));
+            else if (codePoint == QUOTATION_MARK) tokenConsumer.accept(handleString(token, QUOTATION_MARK));
+            else if (codePoint == NUMBER_SIGN) tokenConsumer.accept(handleNumSign(token));
+                //todo else if(codePoint == DOLLAR_SIGN) tokenConsumer.accept(handleDollarSign(token));
+            else if (codePoint == APOSTROPHE) tokenConsumer.accept(handleString(token, APOSTROPHE));
+                //else if(codePoint == HYPHEN_MINUS) tokenConsumer.accept(handleHyphenMinus(token));
 
                 //else if(codePoint == FULL_STOP) tokenConsumer.accept(handleFullStop(token));
-            //else if(codePoint == SOLIDUS) tokenConsumer.accept(handleSolidus(token));
-            //else if(codePoint == LESS_THAN_SIGN) tokenConsumer.accept(handleLessThanSign(token));
-            else if(isDigit(codePoint)) tokenConsumer.accept(consumeNumericToken(codePoint, token));
-            else if(charToSimpleTokenType.containsKey(codePoint)){
-                tokenConsumer.accept(new Token(charToSimpleTokenType.get(codePoint),Character.toString(codePoint)));
+                //else if(codePoint == SOLIDUS) tokenConsumer.accept(handleSolidus(token));
+                //else if(codePoint == LESS_THAN_SIGN) tokenConsumer.accept(handleLessThanSign(token));
+            else if (isDigit(codePoint)) tokenConsumer.accept(consumeNumericToken(codePoint, token));
+            else if (isNameStartCodePoint(codePoint)) tokenConsumer.accept(consumeAnIdentLike(codePoint, token));
+            else if (charToSimpleTokenType.containsKey(codePoint)) {
+                tokenConsumer.accept(new Token(charToSimpleTokenType.get(codePoint), Character.toString(codePoint)));
             }
         }
     }
@@ -61,64 +111,58 @@ public class CssParser {
     private CSSNumber consumeNumber(StringBuilder token) throws IOException {
         CSSNumber number = new CSSNumber();
         number.type = CSSNumber.TYPE_INTEGER;
-        rd.mark(1);
-        char n0 = (char) rd.read();
-        if(n0==HYPHEN_MINUS || n0==PLUS_SIGN){
+        char n0 = (char) rd.readCodePoint();
+        if (n0 == HYPHEN_MINUS || n0 == PLUS_SIGN) {
             token.append(n0);
-        }else{
-            rd.reset();
+        } else {
+            rd.unread(n0);
         }
-        while (true){
-            rd.mark(1);
-            char np = (char) rd.read();
-            if(!isDigit(np)){
-                rd.reset();
+        while (true) {
+            char np = (char) rd.readCodePoint();
+            if (!isDigit(np)) {
+                rd.unread(np);
                 break;
             }
             token.append(np);
         }
-        rd.mark(2);
-        char n2 = (char) rd.read();
-        char n3 = (char) rd.read();
-        if(n2==FULL_STOP && isDigit(n3)){
+        char n2 = (char) rd.readCodePoint();
+        char n3 = (char) rd.readCodePoint();
+        if (n2 == FULL_STOP && isDigit(n3)) {
             token.append(n2);
             token.append(n3);
             number.type = CSSNumber.TYPE_NUMBER;
-            while (true){
-                rd.mark(1);
-                char np = (char) rd.read();
-                if(!isDigit(np)){
-                    rd.reset();
+            while (true) {
+                char np = (char) rd.readCodePoint();
+                if (!isDigit(np)) {
+                    rd.unread(np);
                     break;
                 }
                 token.append(np);
             }
         }
-        if(n2==LATIN_CAPITAL_LETTER_E || n2==LATIN_SMALL_LETTER_E){
-            if(n3==HYPHEN_MINUS || n3==PLUS_SIGN){
-                char n4 = (char) rd.read();
-                if(isDigit(n4)){
+        if (n2 == LATIN_CAPITAL_LETTER_E || n2 == LATIN_SMALL_LETTER_E) {
+            if (n3 == HYPHEN_MINUS || n3 == PLUS_SIGN) {
+                char n4 = (char) rd.readCodePoint();
+                if (isDigit(n4)) {
                     token.append(n2);
                     token.append(n3);
                     token.append(n4);
-                    while (true){
-                        rd.mark(1);
-                        char np = (char) rd.read();
-                        if(!isDigit(np)){
-                            rd.reset();
+                    while (true) {
+                        char np = (char) rd.readCodePoint();
+                        if (!isDigit(np)) {
+                            rd.unread(np);
                             break;
                         }
                         token.append(np);
                     }
                 }
-            }else if(isDigit(n3)){
+            } else if (isDigit(n3)) {
                 token.append(n2);
                 token.append(n3);
-                while (true){
-                    rd.mark(1);
-                    char np = (char) rd.read();
-                    if(!isDigit(np)){
-                        rd.reset();
+                while (true) {
+                    char np = (char) rd.readCodePoint();
+                    if (!isDigit(np)) {
+                        rd.unread(np);
                         break;
                     }
                     token.append(np);
@@ -131,167 +175,131 @@ public class CssParser {
     }
 
     private Token handleNumSign(StringBuilder token) throws IOException {
-        rd.mark(3);
-        char n1 = (char) rd.read();
-        char n2 = (char) rd.read();
-        char n3 = (char) rd.read();
-        if(isNameCodePoint(n1)||isValidEscape(n1,n2)){
-            rd.reset();
+        char n1 = (char) rd.readCodePoint();
+        char n2 = (char) rd.readCodePoint();
+        char n3 = (char) rd.readCodePoint();
+        if (isNameCodePoint(n1) || isValidEscape(n1, n2)) {
+            rd.unread(n3);
+            rd.unread(n2);
+            rd.unread(n1);
             boolean wouldStartValidId = wouldStartValidIdentifier(n1, n2, n3);
             consumeAName(token);
-            Token hashToken = new Token(Token.HASH,token.toString());
-            if(wouldStartValidId) hashToken.setFlag(Token.FLAG_ID);
+            Token hashToken = new Token(Token.HASH, token.toString());
+            if (wouldStartValidId) hashToken.setFlag(Token.FLAG_ID);
             return hashToken;
-        }else{
+        } else {
             //Otherwise, return a <delim-token> with its value set to the current input code point.
             rd.reset();
             return new Token(Token.DELIM, Character.toString(n1));
         }
     }
 
-    private boolean wouldStartValidIdentifier(char n0, char n1, char n2){
-        if(n0==HYPHEN_MINUS){
-            if(isNameStartCodePoint(n1)) return true;
-            return isValidEscape(n1,n2);
-        }else if(isNameStartCodePoint(n0)){
+    private boolean wouldStartValidIdentifier(char n0, char n1, char n2) {
+        if (n0 == HYPHEN_MINUS) {
+            if (isNameStartCodePoint(n1)) return true;
+            return isValidEscape(n1, n2);
+        } else if (isNameStartCodePoint(n0)) {
             return true;
-        }else if(n0==REVERSE_SOLIDUS){
-            return isValidEscape(n0,n1);
+        } else if (n0 == REVERSE_SOLIDUS) {
+            return isValidEscape(n0, n1);
         }
         return false;
     }
 
-    private boolean isValidEscape(char n0, char n1){
-        if(n0!=REVERSE_SOLIDUS) return false;
-        if(isNewLine(n1)) return false;
-        return true;
+    private boolean isValidEscape(char n0, char n1) {
+        if (n0 != REVERSE_SOLIDUS) return false;
+        return !isNewLine(n1);
     }
 
     private char preprocess(char codePoint) throws IOException {
         //Replace pairs of U+000D CARRIAGE RETURN (CR) followed by U+000A LINE FEED (LF) with a single U+000A LINE FEED (LF) code point.
         //Replace of U+000D CARRIAGE RETURN (not followed by U+000A LINE FEED (LF)) with U+000A LINE FEED (LF) code
-        if(codePoint == CARRIAGE_RETURN) {
+        if (codePoint == CARRIAGE_RETURN) {
             rd.mark(1);
-            char nextCodePoint = (char) rd.read(); //todo what if end of stream
-            if (nextCodePoint == LINE_FEED){
+            char nextCodePoint = (char) rd.readCodePoint(); //todo what if end of stream
+            if (nextCodePoint == LINE_FEED) {
                 return LINE_FEED;
-            }else{
+            } else {
                 rd.reset();
                 return LINE_FEED;
             }
         }
         //Replace U+000C FORM FEED with U+000A LINE FEED
-        if(codePoint == FORM_FEED) return LINE_FEED;
+        if (codePoint == FORM_FEED) return LINE_FEED;
         //Replace any U+0000 NULL code point with U+FFFD REPLACEMENT CHARACTER
-        if(codePoint == NULL) return REPLACEMENT_CHARACTER;
+        if (codePoint == NULL) return REPLACEMENT_CHARACTER;
         return codePoint;
     }
 
     private Token handleWhitespace(StringBuilder stringBuilder) throws IOException {
         stringBuilder.setLength(0);
         int in;
-        rd.mark(1);
-        while((in = rd.read()) != -1) {
+        while ((in = rd.readCodePoint()) != -1) {
             char character = preprocess((char) in);
-            if(isWhiteSpace(character)){
-                rd.mark(1);
+            if (isWhiteSpace(character)) {
                 stringBuilder.append(character);
-            }else{
+            } else {
+                rd.unread(character);
                 break;
             }
         }
-        rd.reset();
         return new Token(Token.WHITESPACE, stringBuilder.toString());
     }
 
     private Token handleString(StringBuilder stringBuilder, char quotes) throws IOException {
         stringBuilder.setLength(0);
         int in;
-        rd.mark(1);
-        while((in = rd.read()) != -1) {
+        while ((in = rd.readCodePoint()) != -1) {
             //todo REVERSE SOLIDUS;
-            char character = (char) in; //todo still preprocess
+            char character = (char) in;
             if (isNewLine(character)) {
-                rd.reset();
+                rd.unread(character);
                 return new Token(Token.BAD_STRING, stringBuilder.toString());
-            }else if(character==quotes){
+            } else if (character == quotes) {
                 return new Token(Token.STRING, stringBuilder.toString());
-            }else{
-                rd.mark(1);
+            } else {
                 stringBuilder.append(character);
             }
         }
         return new Token(Token.STRING, stringBuilder.toString());
     }
 
-    private static boolean isNewLine(char codePoint){
-        return codePoint == LINE_FEED;
-    }
-
-    private static boolean isWhiteSpace(char codePoint){
-        if(isNewLine(codePoint)) return true;
-        if(codePoint == CHARACTER_TABULATION) return true;
-        if(codePoint == SPACE) return true;
-        return false;
-    }
-
-    private static boolean isNonAsciiCodePoint(char codePoint){
-        return codePoint >= 0x080;
-    }
-
-    private static boolean isNameStartCodePoint(char codePoint){
-        if(isLetter(codePoint)) return true;
-        if(isNonAsciiCodePoint(codePoint)) return true;
-        if(codePoint==LOW_LINE) return true;
-        return false;
+    private Token consumeAnIdentLike(char n0, StringBuilder stringBuilder) throws IOException {
+        rd.unread(n0);
+        String name = consumeAName(stringBuilder);
+        char n1 = (char) rd.readCodePoint();
+        if(name.equalsIgnoreCase("url") && n1 == LEFT_PARENTHESIS){
+            return new Token(Token.URL, name);
+            //todo consume a URL TOKEN;
+        }else if(n0 == LEFT_PARENTHESIS){
+            rd.unread(n1);
+            return new Token(Token.FUNCTION, name);
+        }else{
+            rd.unread(n1);
+            return new Token(Token.IDENT, name);
+        }
     }
 
     private String consumeAName(StringBuilder stringBuilder) throws IOException {
         stringBuilder.setLength(0);
         int in;
         boolean procede = true;
-        while(procede) {
-            procede = (in = rd.read()) != -1;
-            rd.mark(1);
-            char n0 = (char) in; //todo still preprocess
-            if(isNameCodePoint(n0)){
+        while (procede) {
+            procede = (in = rd.readCodePoint()) != -1;
+            char n0 = (char) in;
+            if (isNameCodePoint(n0)) {
                 stringBuilder.append(n0);
                 continue;
             }
-            rd.reset();
-            rd.mark(2);
-            rd.skip(1);
-            char n1 = (char) rd.read(); //todo still preprocess
-            if(isValidEscape(n0,n1)){
+            char n1 = (char) rd.readCodePoint();
+            if (isValidEscape(n0, n1)) {
                 stringBuilder.append(n1);
-            }else{
-                rd.reset();
+            } else {
+                rd.unread(n0, n1);
                 return stringBuilder.toString();
             }
         }
         return stringBuilder.toString();
-    }
-
-    private static boolean isNameCodePoint(char codePoint){
-        if(isNameStartCodePoint(codePoint)) return true;
-        if(isDigit(codePoint)) return true;
-        if(codePoint == HYPHEN_MINUS) return true;
-        return false;
-    }
-
-    private static boolean isDigit(char codePoint){
-        return codePoint>=DIGIT_ZERO&&codePoint<=DIGIT_NINE;
-    }
-    private static boolean isLetter(char codePoint){
-        return isUpperCaseLetter(codePoint) || isLowerCaseLetter(codePoint);
-    }
-
-    private static boolean isLowerCaseLetter(char codePoint){
-        return (codePoint>=LATIN_SMALL_LETTER_A && codePoint<=LATIN_SMALL_LETTER_Z);
-    }
-
-    private static boolean isUpperCaseLetter(char codePoint){
-        return (codePoint>=LATIN_CAPITAL_LETTER_A && codePoint<=LATIN_CAPITAL_LETTER_Z);
     }
 
 }

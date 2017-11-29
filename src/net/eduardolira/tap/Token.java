@@ -19,6 +19,9 @@ public class Token {
     public static final int NUMBER = 14;
     public static final int PERCENTAGE = 15;
     public static final int DIMENSION = 16;
+    public static final int URL = 17;
+    public static final int FUNCTION = 18;
+    public static final int IDENT = 19;
 
     public static final int FLAG_NONE = -1;
     public static final int FLAG_ID = 0;
