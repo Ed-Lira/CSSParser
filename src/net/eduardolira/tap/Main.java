@@ -18,7 +18,7 @@ public class Main {
 
         CssParser parser = new CssParser();
         parser.setInputStream(fromFile("res/stylesheet.css"));
-        parser.streamTokens((a)->{if (a.getTokenType()!=Token.WHITESPACE) System.out.println(a);});
+        parser.streamTokens((a)->{if (a.getTokenType()!=TokenType.WHITESPACE) System.out.println(a);});
     }
 
     public static InputStream fromWeb(String urlString) throws IOException {
