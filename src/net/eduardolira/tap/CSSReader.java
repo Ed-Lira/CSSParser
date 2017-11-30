@@ -19,6 +19,14 @@ public class CSSReader extends PushbackReader{
     }
 
     public int readCodePoint() throws IOException {
+        //todo this is debug!
+        int out = readCodePointo();
+        //System.out.println("    " + out);
+        //if(out==-1) new Exception().printStackTrace();
+        return out;
+    }
+
+    public int readCodePointo() throws IOException {
         int temp;
         temp = super.read();
         if(temp == -1) return -1;
@@ -45,9 +53,5 @@ public class CSSReader extends PushbackReader{
         //Replace any U+0000 NULL code point with U+FFFD REPLACEMENT CHARACTER
         if(n0 == NULL) return REPLACEMENT_CHARACTER;
         return n0;
-    }
-
-    public void unread(char... chars) throws IOException {
-        super.unread(chars);
     }
 }

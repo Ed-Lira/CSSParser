@@ -3,7 +3,6 @@ package net.eduardolira.tap;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.net.URL;
 import java.util.HashMap;
 import java.util.function.Consumer;
 
@@ -12,6 +11,8 @@ import static net.eduardolira.tap.CodePoint.*;
 public class CssParser {
     private static final HashMap<Character, Integer> charToSimpleTokenType = new HashMap<>();
 
+
+    private CSSReader rd;
     static {
         charToSimpleTokenType.put(COMMA, Token.COMMA);
         charToSimpleTokenType.put(COLON, Token.COLON);
@@ -24,49 +25,8 @@ public class CssParser {
         charToSimpleTokenType.put(RIGHT_CURLY_BRACKET, Token.RIGHT_CURLY_BRACKET);
     }
 
-    private CSSReader rd;
 
-    private static boolean isNewLine(char codePoint) {
-        return codePoint == LINE_FEED;
-    }
 
-    private static boolean isWhiteSpace(char codePoint) {
-        if (isNewLine(codePoint)) return true;
-        if (codePoint == CHARACTER_TABULATION) return true;
-        return codePoint == SPACE;
-    }
-
-    private static boolean isNonAsciiCodePoint(char codePoint) {
-        return codePoint >= 0x080;
-    }
-
-    private static boolean isNameStartCodePoint(char codePoint) {
-        if (isLetter(codePoint)) return true;
-        if (isNonAsciiCodePoint(codePoint)) return true;
-        return codePoint == LOW_LINE;
-    }
-
-    private static boolean isNameCodePoint(char codePoint) {
-        if (isNameStartCodePoint(codePoint)) return true;
-        if (isDigit(codePoint)) return true;
-        return codePoint == HYPHEN_MINUS;
-    }
-
-    private static boolean isDigit(char codePoint) {
-        return codePoint >= DIGIT_ZERO && codePoint <= DIGIT_NINE;
-    }
-
-    private static boolean isLetter(char codePoint) {
-        return isUpperCaseLetter(codePoint) || isLowerCaseLetter(codePoint);
-    }
-
-    private static boolean isLowerCaseLetter(char codePoint) {
-        return (codePoint >= LATIN_SMALL_LETTER_A && codePoint <= LATIN_SMALL_LETTER_Z);
-    }
-
-    private static boolean isUpperCaseLetter(char codePoint) {
-        return (codePoint >= LATIN_CAPITAL_LETTER_A && codePoint <= LATIN_CAPITAL_LETTER_Z);
-    }
 
     public void setInputStream(InputStream inputStream) {
         this.rd = new CSSReader(new InputStreamReader(inputStream));
@@ -76,9 +36,8 @@ public class CssParser {
         char codePoint;
         StringBuilder token = new StringBuilder();
         int temp;
-        while ((temp = rd.readCodePoint())!=-1) {
+        while ((temp = rd.readCodePoint())!=-1 && temp!=65535) {
             codePoint = (char) temp;
-            System.out.println(temp);
             if (isWhiteSpace(codePoint)) tokenConsumer.accept(handleWhitespace(token));
             else if (codePoint == QUOTATION_MARK) tokenConsumer.accept(handleString(token, QUOTATION_MARK));
             else if (codePoint == NUMBER_SIGN) tokenConsumer.accept(handleNumSign(token));
@@ -103,7 +62,7 @@ public class CssParser {
 
     private Token consumeNumericToken(char codePoint, StringBuilder token) throws IOException {
         token.setLength(0);
-        token.append(codePoint);
+        rd.unread(codePoint);
         CSSNumber cssnum = consumeNumber(token);
         return new Token(Token.NUMBER, cssnum.repr);
     }
@@ -117,6 +76,7 @@ public class CssParser {
         } else {
             rd.unread(n0);
         }
+
         while (true) {
             char np = (char) rd.readCodePoint();
             if (!isDigit(np)) {
@@ -125,6 +85,7 @@ public class CssParser {
             }
             token.append(np);
         }
+
         char n2 = (char) rd.readCodePoint();
         char n3 = (char) rd.readCodePoint();
         if (n2 == FULL_STOP && isDigit(n3)) {
@@ -139,8 +100,7 @@ public class CssParser {
                 }
                 token.append(np);
             }
-        }
-        if (n2 == LATIN_CAPITAL_LETTER_E || n2 == LATIN_SMALL_LETTER_E) {
+        }else if (n2 == LATIN_CAPITAL_LETTER_E || n2 == LATIN_SMALL_LETTER_E) {
             if (n3 == HYPHEN_MINUS || n3 == PLUS_SIGN) {
                 char n4 = (char) rd.readCodePoint();
                 if (isDigit(n4)) {
@@ -168,6 +128,9 @@ public class CssParser {
                     token.append(np);
                 }
             }
+        }else{
+            rd.unread(n3);
+            rd.unread(n2);
         }
         //Convert repr to a number, and set the value to the returned value.
         number.repr = token.toString();
@@ -211,31 +174,11 @@ public class CssParser {
         return !isNewLine(n1);
     }
 
-    private char preprocess(char codePoint) throws IOException {
-        //Replace pairs of U+000D CARRIAGE RETURN (CR) followed by U+000A LINE FEED (LF) with a single U+000A LINE FEED (LF) code point.
-        //Replace of U+000D CARRIAGE RETURN (not followed by U+000A LINE FEED (LF)) with U+000A LINE FEED (LF) code
-        if (codePoint == CARRIAGE_RETURN) {
-            rd.mark(1);
-            char nextCodePoint = (char) rd.readCodePoint(); //todo what if end of stream
-            if (nextCodePoint == LINE_FEED) {
-                return LINE_FEED;
-            } else {
-                rd.reset();
-                return LINE_FEED;
-            }
-        }
-        //Replace U+000C FORM FEED with U+000A LINE FEED
-        if (codePoint == FORM_FEED) return LINE_FEED;
-        //Replace any U+0000 NULL code point with U+FFFD REPLACEMENT CHARACTER
-        if (codePoint == NULL) return REPLACEMENT_CHARACTER;
-        return codePoint;
-    }
-
     private Token handleWhitespace(StringBuilder stringBuilder) throws IOException {
         stringBuilder.setLength(0);
         int in;
         while ((in = rd.readCodePoint()) != -1) {
-            char character = preprocess((char) in);
+            char character = (char) in;
             if (isWhiteSpace(character)) {
                 stringBuilder.append(character);
             } else {
@@ -267,12 +210,13 @@ public class CssParser {
     private Token consumeAnIdentLike(char n0, StringBuilder stringBuilder) throws IOException {
         rd.unread(n0);
         String name = consumeAName(stringBuilder);
-        char n1 = (char) rd.readCodePoint();
-        if(name.equalsIgnoreCase("url") && n1 == LEFT_PARENTHESIS){
+        int temp = rd.readCodePoint();
+        char n1 = (char) temp;
+        if(name.equalsIgnoreCase("/--/URL TOKEN\\--\\") && n1 == LEFT_PARENTHESIS){
             return new Token(Token.URL, name);
             //todo consume a URL TOKEN;
         }else if(n0 == LEFT_PARENTHESIS){
-            rd.unread(n1);
+            if(temp!=-1) rd.unread(n1);
             return new Token(Token.FUNCTION, name);
         }else{
             rd.unread(n1);
@@ -291,11 +235,13 @@ public class CssParser {
                 stringBuilder.append(n0);
                 continue;
             }
-            char n1 = (char) rd.readCodePoint();
+            int in1 = rd.readCodePoint();
+            char n1 = (char) in;
             if (isValidEscape(n0, n1)) {
                 stringBuilder.append(n1);
             } else {
-                rd.unread(n0, n1);
+                rd.unread(in1);
+                rd.unread(n0);
                 return stringBuilder.toString();
             }
         }

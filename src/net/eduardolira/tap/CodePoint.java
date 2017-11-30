@@ -38,4 +38,46 @@ public class CodePoint {
     public static final char CIRCUMFLEX_ACCENT = 0x005E;
     public static final char LATIN_CAPITAL_LETTER_E = 0x0045;
     public static final char LATIN_SMALL_LETTER_E = 0x0065;
+
+    public static boolean isNewLine(char codePoint) {
+        return codePoint == LINE_FEED;
+    }
+
+    public static boolean isWhiteSpace(char codePoint) {
+        if (isNewLine(codePoint)) return true;
+        if (codePoint == CHARACTER_TABULATION) return true;
+        return codePoint == SPACE;
+    }
+
+    public static boolean isNonAsciiCodePoint(char codePoint) {
+        return codePoint >= 0x080;
+    }
+
+    public static boolean isNameStartCodePoint(char codePoint) {
+        if (isLetter(codePoint)) return true;
+        if (isNonAsciiCodePoint(codePoint)) return true;
+        return codePoint == LOW_LINE;
+    }
+
+    public static boolean isNameCodePoint(char codePoint) {
+        if (isNameStartCodePoint(codePoint)) return true;
+        if (isDigit(codePoint)) return true;
+        return codePoint == HYPHEN_MINUS;
+    }
+
+    public static boolean isDigit(char codePoint) {
+        return codePoint >= DIGIT_ZERO && codePoint <= DIGIT_NINE;
+    }
+
+    public static boolean isLetter(char codePoint) {
+        return isUpperCaseLetter(codePoint) || isLowerCaseLetter(codePoint);
+    }
+
+    public static boolean isLowerCaseLetter(char codePoint) {
+        return (codePoint >= LATIN_SMALL_LETTER_A && codePoint <= LATIN_SMALL_LETTER_Z);
+    }
+
+    public static boolean isUpperCaseLetter(char codePoint) {
+        return (codePoint >= LATIN_CAPITAL_LETTER_A && codePoint <= LATIN_CAPITAL_LETTER_Z);
+    }
 }
